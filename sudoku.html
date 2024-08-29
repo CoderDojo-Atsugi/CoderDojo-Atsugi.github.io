@@ -1,0 +1,328 @@
+<!DOCTYPE html PUBLIC '-//w3c//dtd html 4.0 transitional//en'>
+<html>
+<head>
+	<meta http-equiv='Content-Type' content='text/html; charset=Shift_JIS'>
+	<meta name='Author' content='CoderDojoAtsugi'>
+	<title>SUDOKU</title>
+</head>
+<body>
+	<table><tr><td> Mode: </td><td id='mode'>DEFINE</td><td>&nbsp;&nbsp;&nbsp;</td><td id='control'></td></tr></table>
+	<div id='field'></div>
+	<script>
+	let field = null;
+	let definedField = null;
+	
+	function getMode() { return document.querySelector('#mode').innerHTML; }
+	
+	function resetControl(buttons) {
+		const parent = document.querySelector('#control');
+		while (parent.firstChild) { parent.removeChild(parent.firstChild); }
+		for (let i in buttons) {
+			const btn = document.createElement('button');
+			btn.id = buttons[i];
+			btn.innerHTML = buttons[i];
+			btn.addEventListener('click', controlClicked);
+			parent.appendChild(btn);
+			const pad = document.createElement('span');
+			pad.innerHTML = ' ';
+			parent.appendChild(pad);
+		}
+	}
+
+	function setMode(mode) {
+		switch (mode) {
+			case 'DEFINE':
+				document.querySelector('#mode').innerHTML = mode;
+				resetControl(['New', 'Save', 'Load', 'Edit']);
+				break;
+			case 'EDIT':
+				document.querySelector('#mode').innerHTML = mode;
+				resetControl(['New', 'Reset', 'Optimize', 'Auto']);
+				break;
+		}
+	}
+	
+	async function controlClicked(e) {
+		console.log("'" + e.target.id + "' was pushed [" + getMode() + "]");
+		switch (getMode() + ':' + e.target.id) {
+			case 'DEFINE:New':
+			case 'EDIT:New':
+				field = new Field();
+				definedField = null;
+				setMode('DEFINE');
+				break;
+			case 'DEFINE:Save':
+				const saveFileHandle = await window.showSaveFilePicker({ suggestedName: 'sudoku.sdk' });
+				await field.save(saveFileHandle);
+				break;
+			case 'DEFINE:Load':
+				const [loadFileHandle] = await window.showOpenFilePicker({ suggestedName: 'sudoku.sdk' });
+				await field.load(loadFileHandle);
+				break;
+			case 'DEFINE:Edit':
+				definedField = new Field();
+				definedField.copyFrom(field);
+				setMode('EDIT');
+				break;
+			case 'EDIT:Reset':
+				field.copyFrom(definedField);
+				break;
+			case 'EDIT:Optimize':
+				field.optimize();
+				break;
+			case 'EDIT:Auto':
+				field.copyFrom(definedField);
+				field.solve();
+				break;
+		}
+		refresh();
+	}
+	
+	class Field {
+		#field = [];
+		constructor() {
+			this.#field = [];
+			for (let row = 0; row < 9; ++row) {
+				this.#field[row] = [];
+				for (let col = 0; col < 9; ++col) { this.setValue(row, col, '123456789'); }
+			}				
+		}
+		getValue(row, col) { return String(this.#field[row][col]); }
+		setValue(row, col, value) { this.#field[row][col] = String(value); }
+		delValue(row, col, value) {
+			const tmp = this.getValue(row, col);
+			const index = tmp.indexOf(value);
+			if (index >= 0) { this.setValue(row, col, tmp.substring(0, index) + tmp.substring(index+1)); }
+		}
+		addValue(row, col, value) {
+			const tmp = this.getValue(row, col);
+			const index = tmp.indexOf(value);
+			if (index < 0) { this.setValue(row, col, tmp + value); }
+		}
+		toggleValue(row, col, value) {
+			const tmp = this.getValue(row, col);
+			const index = tmp.indexOf(value);
+			if (index >= 0) { this.delValue(row, col, value); } else { this.addValue(row, col, value); }
+		}
+		
+		boxToRowCol(box1, box2) { return [Math.trunc(box1/3)*3 + Math.trunc(box2/3), (box1%3)*3 + (box2%3)]; }
+		boxFromRowCol(row, col) { return [Math.trunc(row /3)*3 + Math.trunc(col /3), (row %3)*3 + (col %3)]; }
+		
+		async save(fileHandle) {
+			const writable = await fileHandle.createWritable();
+			for (let row = 0; row < 9; ++row) {
+				let line = "";
+				for (let col = 0; col < 9; ++col) {
+					const value = this.getValue(row, col);
+					line += (value.length > 1)?'*':value;
+				}
+				writable.write(line + "\n");
+			}
+			await writable.close();
+		}
+		async load(fileHandle) {
+			const file = await fileHandle.getFile();
+			const fileData = await file.text();
+			const lines = fileData.split("\n");
+			for (let row = 0; row < 9; ++row) {
+				for (let col = 0; col < 9; ++col) {
+					const value = lines[row].charAt(col);
+					this.setValue(row, col, (value == '*')?'123456789':value);
+				}
+			}
+		}
+		copyFrom(otherField) {
+			for (let row = 0; row < 9; ++row) {
+				for (let col = 0; col < 9; ++col) { this.setValue(row, col, otherField.getValue(row, col)); }
+			}				
+		}
+		equals(otherField) {
+			for (let row = 0; row < 9; ++row) {
+				for (let col = 0; col < 9; ++col) {
+					if (this.getValue(row, col) != otherField.getValue(row, col)) { return false; }
+				}
+			}
+			return true;
+		}
+		canBeSet(row, col, value) {
+			for (let col2 = 0; col2 < 9; ++col2) {
+				if (col2 != col) {
+					if (this.getValue(row, col2) == value) { return false; }
+				}
+			}
+			for (let row2 = 0; row2 < 9; ++row2) {
+				if (row2 != row) {
+					if (this.getValue(row2, col) == value) { return false; }
+				}
+			}
+			const [box1, box2] = this.boxFromRowCol(row, col);
+			for (let box22 = 0; box22 < 9; ++box22) {
+				if (box22 != box2) {
+					let [row2, col2] = this.boxToRowCol(box1, box22);
+					if (this.getValue(row2, col2) == value) { return false; }
+				}
+			}
+			return true;
+		}
+		optimize1(row, col, value) {
+			for (let col2 = 0; col2 < 9; ++col2) {
+				if (col2 != col) { this.delValue(row, col2, value); }
+			}
+			for (let row2 = 0; row2 < 9; ++row2) {
+				if (row2 != row) { this.delValue(row2, col, value); }
+			}
+			const [box1, box2] = this.boxFromRowCol(row, col);
+			for (let box22 = 0; box22 < 9; ++box22) {
+				if (box22 != box2) {
+					const [row2, col2] = this.boxToRowCol(box1, box22);
+					this.delValue(row2, col2, value);
+				}
+			}
+		}
+		optimize() {
+			for (let row = 0; row < 9; ++row) {
+				for (let col = 0; col < 9; ++col) {
+					const value = this.getValue(row, col);
+					if (value.length == 1) { this.optimize1(row, col, value); }
+				}
+			}
+		}
+		solve2(row, col) {
+			const value = this.getValue(row, col);
+			if (value.length == 1) {
+				if (row == 8 && col == 8) { return true; }
+				return this.solve2((col >= 8)?row+1:row, (col >= 8)?0:col+1);
+			}
+			for (let num = 1; num <= 9; ++num) {
+				if (value.indexOf(String(num)) >= 0) {
+					if (!this.canBeSet(row, col, num)) { continue; }
+					this.setValue(row, col, num);
+					if (row == 8 && col == 8) { return true; }
+					if (this.solve2((col >= 8)?row+1:row, (col >= 8)?0:col+1)) { return true; }
+					this.setValue(row, col, value);
+				}
+			}
+			return false;
+		}
+		solve() {
+			while (true) {
+				const tmp = new Field();
+				tmp.copyFrom(this);
+				this.optimize();
+				if (this.equals(tmp)) { break; }
+			}
+			return this.solve2(0, 0);
+		}
+		print() {
+			for (let row = 0; row < 9; ++row) {
+				let line = "";
+				for (let col = 0; col < 9; ++col) { line += this.#field[row][col]; }
+				console.log(line);
+			}
+		}
+	}
+	
+	function refresh() {
+		const parent = document.querySelector('#field');
+		while (parent.firstChild) { parent.removeChild(parent.firstChild); }
+		parent.appendChild(createTable());
+	}
+
+	function buttonPushed(e) {
+		console.log("'" + e.target.id + "' was pushed [" + getMode() + "]");
+		const param = e.target.id.split(',');
+		const row = Number(param[0]);
+		const col = Number(param[1]);
+		const value = param[2];
+		const oldValue = field.getValue(row, col);
+		switch (getMode()) {
+			case 'DEFINE':
+				field.setValue(row, col, (oldValue.length == 1)?'123456789':value);
+				break;
+			case 'EDIT': 
+				if (oldValue == value) { field.setValue(row, col, '123456789') } else { field.toggleValue(row, col, value); }
+				break;
+		}
+		refresh();
+	}
+	
+	function createButton(row, col, caption) {
+		const value = field.getValue(row, col);
+		const btn = document.createElement('button');
+		btn.innerHTML = String(caption);
+		btn.id = String(row) + ',' + String(col) + ',' + String(caption);
+		btn.style.width		= (value.length == 1)?70:22;
+		btn.style.height	= (value.length == 1)?70:22;
+		btn.style.fontSize	= (value.length == 1)?40:12;
+		btn.style.color		= (value.indexOf(String(caption)) >= 0)?'black':'lightgray';
+		if (getMode() == 'EDIT' && definedField.getValue(row, col).length == 1) { btn.style.color = 'red'; }
+		else { btn.addEventListener('click', buttonPushed); }
+		return btn;
+	}
+	
+	function createMinTable(box1, box2) {
+		const [row, col] = field.boxToRowCol(box1, box2);
+		const value = field.getValue(row, col);
+		const table = document.createElement('table');
+		table.cellSpacing = 0;
+		
+		if (value.length == 1) {
+			const tr = document.createElement('tr');
+			const td = document.createElement('td');
+			td.appendChild(createButton(row, col, value));
+			tr.appendChild(td);
+			table.appendChild(tr);
+		}
+		else {
+			for (let tableRow = 0; tableRow < 3; ++tableRow) {
+				const tr = document.createElement('tr');
+				for (let tableCol = 0; tableCol < 3; ++tableCol) {
+					const td = document.createElement('td');
+					td.appendChild(createButton(row, col, tableRow*3+tableCol+1));
+					tr.appendChild(td);
+				}
+				table.appendChild(tr);
+			}
+		}
+		return table;
+	}
+	
+	function createMidTable(box1) {
+		const table = document.createElement('table');
+		table.border = 1;
+		table.cellSpacing = 1;
+		for (let tableRow = 0; tableRow < 3; ++tableRow) {
+			const tr = document.createElement('tr');
+			for (let tableCol = 0; tableCol < 3; ++tableCol) {
+				const td = document.createElement('td');
+				td.appendChild(createMinTable(box1, tableRow*3+tableCol));
+				tr.appendChild(td);
+			}
+			table.appendChild(tr);
+		}
+		return table;
+	}
+	
+	function createTable() {
+		const table = document.createElement('table');
+		table.border = 2;
+		table.cellSpacing = 0;
+		for (let tableRow = 0; tableRow < 3; ++tableRow) {
+			const tr = document.createElement('tr');
+			for (let tableCol = 0; tableCol < 3; ++tableCol) {
+				const td = document.createElement('td');
+				td.appendChild(createMidTable(tableRow*3+tableCol));
+				tr.appendChild(td);
+			}
+			table.appendChild(tr);
+		}
+		return table;
+	}
+	
+	field = new Field();
+	definedField = null;
+	setMode('DEFINE');
+	refresh();
+	</script>
+</body>
+</html>
