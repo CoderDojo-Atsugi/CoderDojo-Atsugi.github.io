@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title></title>
+		<style>body { margin: 0; }</style>
+	</head>
+	<body>
+		<h1><hr></h1>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/109/three.min.js"></script>
+		<script>
+			const [WSEG, HSEG] = [64, 32];
+			const renderer = new THREE.WebGLRenderer();
+			const scene = new THREE.Scene();
+			const camera = createCamera();
+			const sphereGeometry = new THREE.SphereGeometry(1, WSEG, HSEG);
+			let dragging = false;
+			let mousePos = [0, 0];
+			const materialMap = new Map();
+			function createMaterial(color) {
+				let material = materialMap.get(color);
+				if (material == null) {
+					material = new THREE.MeshStandardMaterial({color: color});
+					materialMap.set(color, material);
+				}
+				return material;
+			}
+			class Finger {
+				constructor(len) {
+					const color = 0xf0e0b0;
+					const cylinderGeometry = new THREE.CylinderGeometry(1, 1, len/3, WSEG, 1, false);
+					this.part1 = new THREE.Group();
+					let part1 = new THREE.Mesh(sphereGeometry, createMaterial(color));
+					part1.position.y = len/3;
+					let part2 = new THREE.Mesh(cylinderGeometry, createMaterial(color));
+					part2.position.y = len/6;
+					let part3 = new THREE.Mesh(sphereGeometry, createMaterial(color));
+					this.part1.add(part1, part2, part3);
+
+					this.part2 = new THREE.Group();
+					this.part1.position.y = len/3;
+					part2 = new THREE.Mesh(cylinderGeometry, createMaterial(color));
+					part2.position.y = len/6;
+					part3 = new THREE.Mesh(sphereGeometry, createMaterial(color));
+					this.part2.add(this.part1, part2, part3);
+
+					this.part3 = new THREE.Group();
+					this.part2.position.y = len/3;
+					part2 = new THREE.Mesh(cylinderGeometry, createMaterial(color));
+					part2.position.y = len/6;
+					part3 = new THREE.Mesh(sphereGeometry, createMaterial(color));
+					this.part3.add(this.part2, part2, part3);
+					
+					this.image = this.part3;
+				}
+				grasp(x1, x2, x3) {
+					this.part1.rotation.x = x1;
+					this.part2.rotation.x = x2;
+					this.part3.rotation.x = x3;
+				}
+			}
+			const object = new THREE.Group();
+			const finger1 = new Finger(8);
+			finger1.image.position.set(0, -0.2, 0);
+			object.add(finger1.image);
+			const finger2 = new Finger(9);
+			finger2.image.position.set(-2.2, 0, 0);
+			object.add(finger2.image);
+			const finger3 = new Finger(8);
+			finger3.image.position.set(-4.4, 0, 0);
+			object.add(finger3.image);
+			const finger4 = new Finger(6);
+			finger4.image.position.set(-6.6, -0.3, 0);
+			object.add(finger4.image);
+			function createLight() {
+				const light = new THREE.DirectionalLight(0xffc0c0, 1);
+				light.position.set(1, 1, 1);
+				return light;
+			}
+			function createAmbientLight() { return new THREE.AmbientLight(0x999999, 2.0); }
+			function getWidth() { return window.innerWidth; }
+			function getHeight() { return window.innerHeight; }
+			function createCamera() {
+				const camera = new THREE.PerspectiveCamera(75, getWidth() / getHeight(), 1, 1000);
+				camera.position.set(0, -10, 30);
+				camera.lookAt(new THREE.Vector3(0, 0, 0));
+				return camera;
+			}
+			let param1 = { x1: 0, x2: 0, x3: 0, dx1: 0.01, dx2: 0.01, dx3: 0.01 }
+			let param2 = { x1: 0, x2: 0, x3: 0, dx1: 0.01, dx2: 0.01, dx3: 0.01 }
+			let param3 = { x1: 0, x2: 0, x3: 0, dx1: 0.01, dx2: 0.01, dx3: 0.01 }
+			let param4 = { x1: 0, x2: 0, x3: 0, dx1: 0.01, dx2: 0.01, dx3: 0.01 }
+			function animateFinger(image, param) {
+				param.x1 += param.dx1; if (param.x1 < 0 || param.x1 > Math.PI/2) { param.dx1 = -param.dx1; }
+				param.x2 += param.dx2; if (param.x2 < 0 || param.x2 > Math.PI/2) { param.dx2 = -param.dx2; }
+				param.x3 += param.dx3; if (param.x3 < 0 || param.x3 > Math.PI/2) { param.dx3 = -param.dx3; }
+				image.grasp(param.x1, param.x2, param.x3);
+			}
+			function animate() {
+				animateFinger(finger1, param1);
+				animateFinger(finger2, param2);
+				animateFinger(finger3, param3);
+				animateFinger(finger4, param4);
+				renderer.render(scene, camera);
+				requestAnimationFrame(animate);
+			}
+			function main() {
+				renderer.setSize(getWidth(), getHeight());
+				renderer.setClearColor(0x000030);
+				document.body.appendChild(renderer.domElement);
+				
+				scene.add(createLight());
+				scene.add(createAmbientLight());
+				scene.add(object);
+				renderer.render(scene, camera);
+
+				window.addEventListener('resize', () => {
+					renderer.setSize(getWidth(), getHeight());
+					camera.aspect = getWidth() / getHeight();
+					camera.updateProjectionMatrix();
+				});
+				document.addEventListener('mousedown', (event) => {
+					dragging = true;
+					mousePos = [event.pageX, event.pageY];
+				});
+				document.addEventListener('mouseup',   (event) => {
+					dragging = false;
+				});
+				document.addEventListener('mousemove', (event) => {
+					if (!dragging) { return; }
+					object.rotation.x += Math.PI*(event.pageY - mousePos[1])/1000;
+					object.rotation.y += Math.PI*(event.pageX - mousePos[0])/1000;
+					mousePos = [event.pageX, event.pageY];
+				});
+				document.addEventListener('wheel', (event) => {
+					object.rotation.z += Math.PI*event.deltaY/10000;
+				});
+				animate();
+			}
+			main();
+		</script>
+	</body>
+</html>
