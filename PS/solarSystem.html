@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>太陽系</title>
+		<style>
+			h1 { font-size: 160%; ine-height: 1;margin: 0px; }
+			hr { margin: 0px; padding: 0px;}
+			caption { font-weight: bold; margin-bottom: 10px;}
+			table { border-collapse: collapse; white-space: nowrap; }
+			.numeric th { border: solid 1px gray; padding: 0px 3px 0px 3px; }
+			tbody th { text-align: left; }
+			.numeric td { text-align: right; font-family: monospace; white-space: pre; border: solid 1px gray; padding: 0px 3px 0px 3px; }
+			.remark { font-size: 80%; color: red; }
+			div.indent { margin-left: 2em; }
+			input { margin-right: 20px; width: 250px; }
+			.control td { width: 55px; text-align:right; }
+		</style>
+	</head>
+	<body>
+		<h1>太陽系<hr></h1>
+		<table class="control">
+			<tr>
+				<th>太陽半径</th>	<td id="sunScaleDisp" 	>1</td><td><input id="sunScale"    type="range" min="1" max="250"  value="10"></td>				
+				<th>他半径</th>	<td id="planetScaleDisp">1</td><td><input id="planetScale" type="range" min="1" max="2500" value="50"></td>				
+				<th>公転周期</th>	<td id="timeScaleDisp"  >1</td><td><input id="timeScale"   type="range" min="1" max="250"  value="50"></td>				
+			</tr>
+			<tr>
+				<th>カメラ位置</th><td id="cameraPosDisp"  >1</td><td><input id="cameraPos"   type="range" min="0.1" max="25" value="10" step="0.1"></td>	
+				<th>カメラ角度</th><td id="cameraAngleDisp">0</td><td><input id="cameraAngle" type="range" min="-90" max="90" value="10"></td>				
+				<th>カメラ方向</th><td colspan="2" style="text-align: left;">&nbsp;
+					<select id="focusPlanet">
+						<option value="sun">太陽</option>
+						<option value="mercury">水星</option>
+						<option value="venus">金星</option>
+						<option value="earth">地球</option>
+						<option value="mars">火星</option>
+						<option value="jupiter">木星</option>
+						<option value="saturn">土星</option>
+						<option value="uranus">天王星</option>
+						<option value="neptune">海王星</option>
+						<option value="moon">月</option>
+					</select>
+				</td>
+			</tr>
+		</table>
+		<details><summary>詳細</summary>
+		<div class="indent">
+			<table><tr>
+				<td>
+					<table id="planetTable" class="numeric">
+						<thead><tr><th>名称</th><th>色</th><th>赤道半径(km)</th><th>軌道半径(AU)</th><th>公転周期(年)</th></tr></thead>
+						<tbody>
+							<tr id="sun">		<th></th><td></td><td></td><td></td><td></td></tr>
+							<tr id="mercury">	<th></th><td></td><td></td><td></td><td></td></tr>
+							<tr id="venus">		<th></th><td></td><td></td><td></td><td></td></tr>
+							<tr id="earth">		<th></th><td></td><td></td><td></td><td></td></tr>
+							<tr id="moon">		<th></th><td></td><td></td><td></td><td></td></tr>
+							<tr id="mars">		<th></th><td></td><td></td><td></td><td></td></tr>
+							<tr id="jupiter">	<th></th><td></td><td></td><td></td><td></td></tr>
+							<tr id="saturn">	<th></th><td></td><td></td><td></td><td></td></tr>
+							<tr id="ringA">		<th></th><td></td><td></td><td></td><td></td></tr>
+							<tr id="ringB">		<th></th><td></td><td></td><td></td><td></td></tr>
+							<tr id="uranus">	<th></th><td></td><td></td><td></td><td></td></tr>
+							<tr id="neptune">	<th></th><td></td><td></td><td></td><td></td></tr>
+						</tbody>
+					</table>
+				</td>
+				<td style="vertical-align: top; padding-left: 20px;white-space: wrap;">
+					<div class="remark" style="vertical-align: bottom;">
+						AUは天文単位（太陽から地球までの距離を1とした単位）です。
+						<br>1AU は 149,597,870.7km（約1億5000万km）となります。
+						<br><br>軌道半径、公転周期は太陽に対する軌道半径・公転周期を記載しています。
+						<br>ただし、月の軌道半径、公転周期は地球に対する軌道半径・公転周期を記載しています。
+						<br>また、土星の環A/Bの赤道半径は環の内径/外径を記載しています。
+						<br>(最外周の環Aの外径は事実に基づいていますが、他は適当。また実際には環は多数存在しています)
+						<br><br>簡単のため、恒星、惑星、衛星はすべて球体、各軌道はすべて円軌道にしています。
+						<br>また、軌道面の角度も付けていません。（軌道面角度はもともと0に近いですが）
+						<br>すべての惑星は同一方向に回転していますが、これは事実の通りです。
+						<br><br>各惑星等を照らす光がどこから射しているかは気にしないでください。（特に木名瀬さんへ）
+					</div>
+				</td>
+			</tr></table>
+			<br>
+		</div>
+		</details>
+		<span id="canvas" style="width: 100%; height: 100%;"></span>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/109/three.min.js"></script>
+		<script>
+			const [WSEG, HSEG, SCALE_FACTOR, TIME_FACTOR] = [64, 32, 1/10000, 1/10000];
+			const AU = 149597870.7*SCALE_FACTOR;
+			let [sunScale, planetScale, timeScale, cameraPos, cameraAngle, focusPlanet] = [1, 1, 1, 1, 0, 'sun'];
+			const renderer = new THREE.WebGLRenderer();
+			const scene = new THREE.Scene();
+			const camera = new THREE.PerspectiveCamera(60, getWidth()/getHeight(), 1, AU*cameraPos*100);
+			const planetMap = new Map();
+			const solarSystem = {
+				'name': 'sun',		'label': '太陽',
+				'type': 'sphere',	'radius': 696000,	'color': 0xffd700,
+				'orbitRadius': 0,	'orbitPeriod': 0,
+				'planetInfo': [
+					{
+						'name': 'mercury',		'label': '水星',
+						'type': 'sphere',		'radius': 2440,			'color': 0xc0c0c0,
+						'orbitRadius': 0.3871,	'orbitPeriod': 0.24085
+					},
+					{
+						'name': 'venus',		'label': '金星',
+						'type': 'sphere',		'radius': 6052,			'color': 0xdeb887,
+						'orbitRadius': 0.7233,	'orbitPeriod': 0.61521
+					},
+					{
+						'name': 'earth',		'label': '地球',
+						'type': 'sphere',		'radius': 6378,		'color': 0x0000cd,
+						'orbitRadius': 1.0000,	'orbitPeriod': 1.00004,
+						'planetInfo': [
+							{
+								'name': 'moon',			'label': '月',
+								'type': 'sphere',		'radius': 1737.4,		'color': 0xdcdcdc,
+								'orbitRadius': 0.00257,	'orbitPeriod': 0.07474
+							}
+						]
+					},
+					{
+						'name': 'mars',				'label': '火星',
+						'type': 'sphere',			'radius': 3397,				'color': 0xdaa520,
+						'orbitRadius': 1.5237,		'orbitPeriod':  1.88087
+					},
+					{
+						'name': 'jupiter',			'label': '木星',
+						'type': 'sphere',			'radius': 71492,			'color': 0xffffff,
+						'orbitRadius': 5.2026,		'orbitPeriod': 11.86155
+					},
+					{
+						'name': 'saturn',			'label': '土星',
+						'type': 'sphere',			'radius': 60268,			'color': 0xffa500,
+						'orbitRadius': 9.5549,		'orbitPeriod': 29.53216,
+						'planetInfo': [
+							{
+								'name': 'ringA',	'label': '輪A',
+								'type': 'ring',		'insideRadius': 115000,	'outsideRadius': 137600,	'thickness': 5000,	'color': 0xb89fb8,
+								'orbitRadius': 0,	'orbitPeriod': 0
+							},
+							{
+								'name': 'ringB',	'label': '輪B',
+								'type': 'ring',		'insideRadius': 77000,	'outsideRadius': 112000,	'thickness': 5000,	'color': 0xb89fb8,
+								'orbitRadius': 0,	'orbitPeriod': 0
+							}
+						]
+					},
+					{
+						'name': 'uranus',		'label': '冥王星',
+						'type': 'sphere',		'radius': 25559,			'color': 0xff00ff,
+						'orbitRadius': 19.2184,	'orbitPeriod': 84.25300
+					},
+					{
+						'name': 'neptune',		'label': '海王星',
+						'type': 'sphere',		'radius': 24764,			'color': 0x00ff00,
+						'orbitRadius': 30.1104,	'orbitPeriod': 165.2269
+					}
+				]
+			};
+			const system = createSystem(solarSystem);
+			function fillTableTr(tr, name, planetInfo, found) {
+				if (found) { return; }
+				if (planetInfo.name == name) {
+					tr.querySelector('th').textContent = planetInfo.label;
+					const tds = tr.querySelectorAll('td');
+					tds[0].setAttribute('style', 'background-color: black; color: #' + (planetInfo.color & 0xffffff).toString(16).padStart(6, '0') +';');
+					tds[0].innerHTML = '&#9679';
+					tds[1].textContent = (planetInfo.type == 'sphere')?Number(planetInfo.radius).toLocaleString()
+						:(planetInfo.type == 'ring')?Number(planetInfo.insideRadius).toLocaleString() + '/' + Number(planetInfo.outsideRadius).toLocaleString():'-';
+					tds[2].textContent = (planetInfo.orbitRadius == 0)?'-':Number(planetInfo.orbitRadius).toLocaleString();
+					tds[3].textContent = (planetInfo.orbitPeriod == 0)?'-':Number(planetInfo.orbitPeriod).toLocaleString();
+					found = true;
+				}
+				if (planetInfo.planetInfo != undefined) { planetInfo.planetInfo.forEach((child) => fillTableTr(tr, name, child, found)); }
+			}
+			function fillTable() {
+				document.querySelector('#planetTable').querySelectorAll('tr').forEach((tr) => {
+					const id = tr.getAttribute('id');
+					if (id != null && planetMap.get(id) != null) { fillTableTr(tr, id, solarSystem, false); }
+				});
+			}
+			function updateParameters() {
+				sunScale    = Number(document.querySelector('#sunScale').value);
+				document.querySelector('#sunScaleDisp').textContent = 'x' + sunScale;
+				planetScale = Number(document.querySelector('#planetScale').value);
+				document.querySelector('#planetScaleDisp').textContent = 'x' + planetScale;
+				timeScale   = Number(document.querySelector('#timeScale').value);
+				document.querySelector('#timeScaleDisp').textContent = 'x' + timeScale;
+				cameraPos   = Number(document.querySelector('#cameraPos').value);
+				document.querySelector('#cameraPosDisp').textContent = 'x' + cameraPos;
+				cameraAngle = Number(document.querySelector('#cameraAngle').value);
+				document.querySelector('#cameraAngleDisp').textContent = cameraAngle;
+				focusPlanet = document.querySelector('#focusPlanet').value;
+			}
+			function createLight() {
+				const light = new THREE.DirectionalLight(0xffffff, 1);
+				light.position.set(1, 1, 1);
+				return light;
+			}
+			function createAmbientLight() { return new THREE.AmbientLight(0x888888, 2.0); }
+			function setCamera() {
+				const [planet, orbit, period] = planetMap.get(focusPlanet);
+				const focus = planet.getWorldPosition(new THREE.Vector3());
+				camera.position.set(
+					focus.x,
+					focus.y+AU*cameraPos*Math.sin(cameraAngle/90*Math.PI/2),
+					focus.z+AU*cameraPos*Math.cos(cameraAngle/90*Math.PI/2));
+				camera.far = AU*cameraPos*100;
+				camera.up = new THREE.Vector3(0, 1, 0);
+				camera.lookAt(focus);
+				camera.updateProjectionMatrix();
+			}
+			function createShape(planetInfo) {
+				switch (planetInfo.type) {
+				case 'none':
+					return null;
+				case 'ring':
+					const points = [
+						new THREE.Vector2(planetInfo.outsideRadius,	planetInfo.thickness/2),
+						new THREE.Vector2(planetInfo.outsideRadius,	-planetInfo.thickness/2),
+						new THREE.Vector2(planetInfo.insideRadius,	-planetInfo.thickness/2),
+						new THREE.Vector2(planetInfo.insideRadius,	planetInfo.thickness/2),
+						new THREE.Vector2(planetInfo.outsideRadius,	planetInfo.thickness/2),
+					];
+					return new THREE.Mesh(new THREE.LatheGeometry(points, WSEG), new THREE.MeshStandardMaterial( { color: planetInfo.color } ));
+				case 'sphere':
+					return new THREE.Mesh(new THREE.SphereGeometry(planetInfo.radius, WSEG, HSEG), new THREE.MeshStandardMaterial({ color: planetInfo.color }));
+				default:
+					console.log('error');
+					return null;
+				}
+			}
+			function createSystem(planetInfo) {
+				if (planetInfo.name == null) { throw new Error(); }
+				const group = new THREE.Group();
+				const planet = createShape(planetInfo);
+				if (planet != null) { group.add(planet); }
+				if (planetInfo.planetInfo != undefined) { planetInfo.planetInfo.forEach((planetInfo) => group.add(createSystem(planetInfo))); }
+				group.position.set(planetInfo.orbitRadius*AU, 0, 0);
+				const orbit = new THREE.Group();
+				orbit.add(group);
+				planetMap.set(planetInfo.name, [planet, orbit, planetInfo.orbitPeriod]);
+				return orbit;
+			}
+			function getWidth() { return window.innerWidth-30; }
+			function getHeight() { return getWidth()/2.5; }
+			function adjust() {
+				planetMap.keys().forEach((key) => {
+					const [planet, orbit, period] = planetMap.get(key);
+					if (planet == null) { return; }
+					const s = ((key == 'sun')?sunScale:planetScale)*SCALE_FACTOR;
+					planet.scale.set(s, s, s);
+				});
+			}
+			function animate() {
+				planetMap.keys().forEach((key) => {
+					const [planet, orbit, period] = planetMap.get(key);
+					if (period != 0) { orbit.rotation.y += 1/period*TIME_FACTOR*timeScale; }
+				});
+				setCamera();
+				renderer.render(scene, camera);
+				requestAnimationFrame(animate);
+			}
+			function redraw() {
+				updateParameters();
+				adjust();
+			}
+			function main() {
+				fillTable();
+				renderer.setSize(getWidth(), getHeight());
+				renderer.setClearColor(0x000000);
+				document.querySelector('#canvas').appendChild(renderer.domElement);
+				scene.add(createLight());
+				scene.add(createAmbientLight());
+				scene.add(system);
+				renderer.render(scene, camera);
+			redraw();
+				
+				window.addEventListener('resize', () => { renderer.setSize(getWidth(), getHeight()); setCamera(); });
+				['#sunScale', '#planetScale', '#timeScale', '#cameraPos', '#cameraAngle', '#focusPlanet'].forEach((key) => {
+					document.querySelector(key).addEventListener('input', () => redraw())
+				});
+				animate();
+			}
+			main();
+		</script>
+	</body>
+</html>
